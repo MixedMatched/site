@@ -2,4 +2,4 @@
 title="typst compile adrs.typ"
 +++
 
-put the pdf here :p
+{{ pdf_embed(src="adrs.pdf", width="100%", height="80%") }}
