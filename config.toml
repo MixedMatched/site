@@ -17,6 +17,7 @@ highlight_code = true
 [extra]
 toc = true
 display_author = true
+footer_content_license = "🄯 2024 adrs all rites reversed"
 
 header_nav = [
     { url = "/site/", name_en = "/home/" },
