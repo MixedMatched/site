@@ -1,5 +1,5 @@
 # The URL the site will be built for
-base_url = "https://mixedmatched.github.io/site/"
+base_url = "https://adrs.pub"
 
 # Whether to automatically compile all Sass files in the sass directory
 compile_sass = true
@@ -18,11 +18,11 @@ highlight_code = true
 toc = true
 display_author = true
 footer_content_license = "🄯 2024 adrs all rites reversed"
-footer_content_license_link = "/site/last-copyrites"
+footer_content_license_link = "/last-copyrites"
 
 header_nav = [
-    { url = "/site/", name_en = "/home/" },
-    { url = "/site/about", name_en = "/about/" },
-    { url = "/site/resume", name_en = "/resume/" },
-    { url = "/site/blog", name_en = "/blog/" },
+    { url = "/", name_en = "/home/" },
+    { url = "/about", name_en = "/about/" },
+    { url = "/resume", name_en = "/resume/" },
+    { url = "/blog", name_en = "/blog/" },
 ]
