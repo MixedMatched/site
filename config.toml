@@ -17,7 +17,7 @@ highlight_code = true
 [extra]
 toc = true
 display_author = true
-footer_content_license = "🄯 2024 adrs all rites reversed"
+footer_content_license = "🄯 2024-2025 adrs all rites reversed"
 footer_content_license_link = "/last-copyrites"
 favicon = "heart.svg"
 image = ""
