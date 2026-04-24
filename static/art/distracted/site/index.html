@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>distractions</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  <script src="charts.js"></script>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background: radial-gradient(circle at 50% 50%, #3a3a3a 0%, #1c1c1c 100%);
+      width: 100%; height: 100%;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    #schedule-bg {
+      position: fixed;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0.92;
+      filter: drop-shadow(0 6px 24px rgba(0,0,0,0.7));
+      z-index: 1;
+    }
+    .floater {
+      position: absolute;
+      left: 0; top: 0;
+      transform-origin: center center;
+      will-change: transform;
+      cursor: grab;
+      user-select: none;
+      filter: drop-shadow(0 8px 18px rgba(0,0,0,0.55));
+      z-index: 10;
+      touch-action: none;
+    }
+    .floater.dragging { cursor: grabbing; z-index: 20; }
+    .floater .chart-box {
+      background: #999;
+      border-radius: 18px;
+      padding: 18px 22px 12px;
+      margin: 0;
+      box-sizing: border-box;
+    }
+    .floater .chart-box h2 {
+      margin: 0 0 10px;
+      text-align: center;
+      color: #222;
+      font-style: italic;
+      font-size: 15px;
+    }
+    .header {
+      position: fixed; top: 14px; left: 18px;
+      color: #cfcfcf; font-size: 13px; z-index: 100;
+      pointer-events: none;
+      letter-spacing: 0.4px;
+    }
+    .header b { color: #fff; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<div id="schedule-bg"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  1. Render the schedule into the centered background div
+// ════════════════════════════════════════════════════════════════
+const bg = d3.select('#schedule-bg');
+ChartLib.renderSchedule(bg, { colWidth: 130, gridHeight: 580 });
+
+// ════════════════════════════════════════════════════════════════
+//  2. Render each floating chart into its own absolute div
+// ════════════════════════════════════════════════════════════════
+const PANELS = [
+  { fn: 'renderBookThemes',     opts: { width: 290, height: 190 } },
+  { fn: 'renderSentimentArc',   opts: { width: 430, rowHeight: 54, labelW: 115 } },
+  { fn: 'renderReadingScatter', opts: { width: 370, height: 250 } },
+  { fn: 'renderMusicGenreArea', opts: { width: 440, height: 240 } },
+  { fn: 'renderMusicDecadeBar', opts: { width: 350, height: 220 } },
+];
+
+const panels = PANELS.map(p => {
+  const div = document.createElement('div');
+  div.className = 'floater';
+  document.body.appendChild(div);
+  ChartLib[p.fn](d3.select(div), p.opts);
+  const rect = div.getBoundingClientRect();
+  return { div, w: rect.width, h: rect.height };
+});
+
+// ════════════════════════════════════════════════════════════════
+//  3. Matter.js physics setup
+// ════════════════════════════════════════════════════════════════
+const { Engine, World, Bodies, Body, Events } = Matter;
+const engine = Engine.create();
+engine.gravity.x = 0; engine.gravity.y = 0;
+const world = engine.world;
+
+let viewW = window.innerWidth, viewH = window.innerHeight;
+
+// Static walls so panels can't escape the viewport
+const wallT = 200;
+const walls = [
+  Bodies.rectangle(viewW/2, -wallT/2,            viewW + 2*wallT, wallT, { isStatic: true }),
+  Bodies.rectangle(viewW/2, viewH + wallT/2,     viewW + 2*wallT, wallT, { isStatic: true }),
+  Bodies.rectangle(-wallT/2, viewH/2,            wallT, viewH + 2*wallT, { isStatic: true }),
+  Bodies.rectangle(viewW + wallT/2, viewH/2,     wallT, viewH + 2*wallT, { isStatic: true }),
+];
+World.add(world, walls);
+
+// Distribute panels in a ring around viewport center.
+// Mass is held equal for every panel (density ∝ 1/area) so collisions
+// between large and small panels resolve fairly — otherwise the bigger
+// (heavier) panels muscle the smaller ones out of the center.
+const TARGET_MASS = 0.1;
+panels.forEach((p, i) => {
+  const angle = (i / panels.length) * Math.PI * 2 - Math.PI / 2;
+  const radius = Math.min(viewW, viewH) * 0.28;
+  const cx = viewW/2 + Math.cos(angle) * radius;
+  const cy = viewH/2 + Math.sin(angle) * radius;
+  p.body = Bodies.rectangle(cx, cy, p.w, p.h, {
+    frictionAir: 0.06,
+    restitution: 0.35,
+    density: TARGET_MASS / (p.w * p.h),
+    chamfer: { radius: 18 },
+  });
+  p.div.style.width  = p.w + 'px';
+  p.div.style.height = p.h + 'px';
+  World.add(world, p.body);
+});
+
+// ════════════════════════════════════════════════════════════════
+//  4. Drift-back attractor — gentle pull toward viewport center
+// ════════════════════════════════════════════════════════════════
+Events.on(engine, 'beforeUpdate', () => {
+  const cx = viewW/2, cy = viewH/2;
+  panels.forEach(p => {
+    if (p.dragging) return;
+    const px = p.body.position.x, py = p.body.position.y;
+    const dx = cx - px, dy = cy - py;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 4) return;
+    // Base attractor — scales with distance, capped
+    let strength = 0.0000016 * Math.min(dist, 800);
+    // If the panel has poked past the viewport edge, ramp the pull up sharply
+    const halfDiag = Math.hypot(p.w, p.h) / 2;
+    const overL = Math.max(0, halfDiag - px);
+    const overR = Math.max(0, px + halfDiag - viewW);
+    const overT = Math.max(0, halfDiag - py);
+    const overB = Math.max(0, py + halfDiag - viewH);
+    const escape = overL + overR + overT + overB;
+    if (escape > 0) strength += 0.00003 * Math.min(escape, 400);
+    Body.applyForce(p.body, p.body.position, {
+      x: (dx / dist) * strength * p.body.mass,
+      y: (dy / dist) * strength * p.body.mass,
+    });
+    // tiny random jitter so panels don't lock into a perfect stack
+    Body.applyForce(p.body, p.body.position, {
+      x: (Math.random() - 0.5) * 0.000005 * p.body.mass,
+      y: (Math.random() - 0.5) * 0.000005 * p.body.mass,
+    });
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+//  5. Render loop — sync DOM transforms from physics bodies
+// ════════════════════════════════════════════════════════════════
+function tick() {
+  Engine.update(engine, 1000/60);
+  panels.forEach(p => {
+    const x = p.body.position.x - p.w/2;
+    const y = p.body.position.y - p.h/2;
+    p.div.style.transform =
+      `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${p.body.angle.toFixed(4)}rad)`;
+  });
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ════════════════════════════════════════════════════════════════
+//  6. Pointer-event drag (preserves SVG tooltips inside the panels)
+// ════════════════════════════════════════════════════════════════
+panels.forEach(p => {
+  let pointerId = null, lastX = 0, lastY = 0, lastT = 0, vx = 0, vy = 0;
+  let offsetX = 0, offsetY = 0;
+
+  p.div.addEventListener('pointerdown', e => {
+    if (pointerId !== null) return;
+    pointerId = e.pointerId;
+    p.div.setPointerCapture(pointerId);
+    p.div.classList.add('dragging');
+    p.dragging = true;
+    Body.setVelocity(p.body, { x: 0, y: 0 });
+    Body.setAngularVelocity(p.body, 0);
+    offsetX = e.clientX - p.body.position.x;
+    offsetY = e.clientY - p.body.position.y;
+    lastX = e.clientX; lastY = e.clientY;
+    lastT = performance.now();
+    vx = vy = 0;
+  });
+
+  p.div.addEventListener('pointermove', e => {
+    if (e.pointerId !== pointerId) return;
+    const now = performance.now();
+    const dt = Math.max(1, now - lastT);
+    // velocity in px per ~16ms tick (matches Engine.update step)
+    vx = (e.clientX - lastX) / dt * 16;
+    vy = (e.clientY - lastY) / dt * 16;
+    lastX = e.clientX; lastY = e.clientY; lastT = now;
+    // Clamp target so at least most of the panel stays in the viewport.
+    // Using ~40% of half-extent as the keep-in margin lets the user fling
+    // panels toward edges, but never fully off-screen.
+    const keep = 0.4;
+    const minX = p.w * keep, maxX = viewW - p.w * keep;
+    const minY = p.h * keep, maxY = viewH - p.h * keep;
+    const tx = Math.max(minX, Math.min(maxX, e.clientX - offsetX));
+    const ty = Math.max(minY, Math.min(maxY, e.clientY - offsetY));
+    Body.setPosition(p.body, { x: tx, y: ty });
+    Body.setVelocity(p.body, { x: 0, y: 0 });
+  });
+
+  function release(e) {
+    if (e.pointerId !== pointerId) return;
+    try { p.div.releasePointerCapture(pointerId); } catch (_) {}
+    p.div.classList.remove('dragging');
+    p.dragging = false;
+    pointerId = null;
+    // launch with the recent flick velocity, plus a small spin
+    const speed = Math.hypot(vx, vy);
+    Body.setVelocity(p.body, { x: vx, y: vy });
+    Body.setAngularVelocity(p.body, (Math.random() - 0.5) * Math.min(0.08, speed * 0.004));
+  }
+  p.div.addEventListener('pointerup', release);
+  p.div.addEventListener('pointercancel', release);
+});
+
+// ════════════════════════════════════════════════════════════════
+//  7. Resize — rebuild walls so panels stay contained
+// ════════════════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  viewW = window.innerWidth; viewH = window.innerHeight;
+  Body.setPosition(walls[0], { x: viewW/2, y: -wallT/2 });
+  Body.setPosition(walls[1], { x: viewW/2, y: viewH + wallT/2 });
+  Body.setPosition(walls[2], { x: -wallT/2, y: viewH/2 });
+  Body.setPosition(walls[3], { x: viewW + wallT/2, y: viewH/2 });
+});
+</script>
+</body>
+</html>

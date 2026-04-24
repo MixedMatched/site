@@ -1,6 +1,6 @@
 +++
 title = "La teoría de la bolsa de ficción"
-date = 2026-01-29
+date = 2026-03-20
 
 [extra]
 cover = "PXL_20260424_193954315.jpg"
