@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+.art-grid {
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+.art-grid li {
+  margin-left: 1.5em;
+}
+.art-card {
+  display: block;
+  color: var(--text);
+  padding: .5rem;
+  border: dashed 2px var(--accent);
+  border-radius: 15px;
+}
+.art-card:hover {
+  background-color: var(--bg-light);
+  color: var(--text);
+}
+.art-card img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: center;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+}
+</style>
+
+<h1>{{ section.title }}</h1>
+
+{{ section.content | safe }}
+
+<ul class="art-grid">
+{% for page in section.pages %}
+  <li>
+    <a class="art-card" href="{{ page.permalink | safe }}">
+      {% if page.extra.cover %}
+      {% if page.extra.cover is starting_with("/") %}
+        {% set cover_url = page.extra.cover %}
+      {% else %}
+        {% set cover_url = page.permalink ~ page.extra.cover %}
+      {% endif %}
+      <img src="{{ cover_url | safe }}" alt="{{ page.title }}">
+      {% endif %}
+      <div>{{ page.title }}</div>
+    </a>
+  </li>
+{% endfor %}
+</ul>
+{% endblock content %}
